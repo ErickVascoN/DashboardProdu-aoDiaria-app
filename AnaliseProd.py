@@ -93,6 +93,7 @@ def dias_uteis(datas):
     d = pd.to_datetime(datas).dropna().dt.normalize().drop_duplicates()
     return int((d.dt.weekday <= 4).sum())
 
+
 # Analise dos filtros e persistencia dos mesmos.
 def qp_list(key):
     vals = st.query_params.get_all(key)
@@ -204,7 +205,9 @@ def sync_faccao_from_produto():
             faccoes_encontradas.update(prod_to_faccao.get(prod, []))
 
         nova_faccao = [f for f in faccoes_base if f in faccoes_encontradas]
-        st.session_state["f_faccao"] = nova_faccao if nova_faccao else list(faccoes_base)
+        st.session_state["f_faccao"] = (
+            nova_faccao if nova_faccao else list(faccoes_base)
+        )
 
     st.session_state["_faccao_sync_from_produto"] = True
 
@@ -238,9 +241,15 @@ def carregar_dados():
         df["Data"], dayfirst=True, format="mixed", errors="coerce"
     )
     df["FACÇÃO"] = df["FACÇÃO"].astype(str).str.strip().str.upper()
-    df["Produzido"] = pd.to_numeric(
-        df["Produzido"].replace("-", "0"), errors="coerce"
-    ).fillna(0)
+    df["Produzido"] = (
+        df["Produzido"]
+        .astype(str)
+        .str.strip()
+        .str.replace(".", "", regex=False)  # milhar BR  (3.256 → 3256)
+        .str.replace(",", ".", regex=False)  # decimal BR (3,5  → 3.5)
+        .replace("-", "0")
+    )
+    df["Produzido"] = pd.to_numeric(df["Produzido"], errors="coerce").fillna(0)
     df = df.dropna(subset=["Data"]).copy()
     df = df[
         df["FACÇÃO"].ne("NAN")
@@ -275,15 +284,18 @@ df_f = df[df["Ano"].isin(ano_sel)]
 meses_disp = sorted(df_f["Mês"].unique())
 mes_sel_default = pick_ints_from_qp("mes", meses_disp, meses_disp)
 init_state_once("f_mes", mes_sel_default)
-st.session_state["f_mes"] = [m for m in st.session_state["f_mes"] if m in meses_disp] or meses_disp
-mes_sel = st.sidebar.multiselect("Mês", meses_disp, format_func=lambda m: MESES_NOME[m], key="f_mes")
+st.session_state["f_mes"] = [
+    m for m in st.session_state["f_mes"] if m in meses_disp
+] or meses_disp
+mes_sel = st.sidebar.multiselect(
+    "Mês", meses_disp, format_func=lambda m: MESES_NOME[m], key="f_mes"
+)
 df_f = df_f[df_f["Mês"].isin(mes_sel)]
 
 init_state_once("_ano_mes_prev", {"ano": list(ano_sel), "mes": list(mes_sel)})
-ano_mes_changed = (
-    sorted(st.session_state["_ano_mes_prev"].get("ano", [])) != sorted(ano_sel)
-    or sorted(st.session_state["_ano_mes_prev"].get("mes", [])) != sorted(mes_sel)
-)
+ano_mes_changed = sorted(st.session_state["_ano_mes_prev"].get("ano", [])) != sorted(
+    ano_sel
+) or sorted(st.session_state["_ano_mes_prev"].get("mes", [])) != sorted(mes_sel)
 
 st.sidebar.markdown("### 📅 Filtro de Dias")
 modo_dia_default = st.query_params.get("modo_dia", "Período")
@@ -292,7 +304,9 @@ if modo_dia_default not in ["Um dia", "Período"]:
 init_state_once("f_modo_dia", modo_dia_default)
 if st.session_state["f_modo_dia"] not in ["Um dia", "Período"]:
     st.session_state["f_modo_dia"] = "Período"
-modo_dia = st.sidebar.radio("Tipo de filtro", ["Um dia", "Período"], horizontal=True, key="f_modo_dia")
+modo_dia = st.sidebar.radio(
+    "Tipo de filtro", ["Um dia", "Período"], horizontal=True, key="f_modo_dia"
+)
 
 dia_sel = None
 ini = None
@@ -307,7 +321,9 @@ if not df_f.empty:
         init_state_once("f_dia", dia_default)
         if ano_mes_changed:
             st.session_state["f_dia"] = data_max
-        st.session_state["f_dia"] = clamp_date(st.session_state["f_dia"], data_min, data_max)
+        st.session_state["f_dia"] = clamp_date(
+            st.session_state["f_dia"], data_min, data_max
+        )
         dia_sel = st.sidebar.date_input(
             "Dia",
             min_value=data_min,
@@ -329,8 +345,12 @@ if not df_f.empty:
             st.session_state["f_inicio"] = data_min
             st.session_state["f_fim"] = data_max
         else:
-            st.session_state["f_inicio"] = clamp_date(st.session_state["f_inicio"], data_min, data_max)
-            st.session_state["f_fim"] = clamp_date(st.session_state["f_fim"], data_min, data_max)
+            st.session_state["f_inicio"] = clamp_date(
+                st.session_state["f_inicio"], data_min, data_max
+            )
+            st.session_state["f_fim"] = clamp_date(
+                st.session_state["f_fim"], data_min, data_max
+            )
 
         ini_sel = st.sidebar.date_input(
             "Início",
@@ -377,7 +397,9 @@ st.session_state["_faccao_to_prod"] = {
 
 facc_sel_default = pick_strs_from_qp("faccao", faccoes_disp, faccoes_disp)
 init_state_once("f_faccao", facc_sel_default)
-st.session_state["f_faccao"] = [f for f in st.session_state["f_faccao"] if f in faccoes_disp] or faccoes_disp
+st.session_state["f_faccao"] = [
+    f for f in st.session_state["f_faccao"] if f in faccoes_disp
+] or faccoes_disp
 facc_sel = st.sidebar.multiselect("Facção", faccoes_disp, key="f_faccao")
 
 init_state_once("f_faccao_prev", list(facc_sel))
@@ -403,7 +425,9 @@ if faccao_changed and not sync_from_produto:
         produtos_rel.update(faccao_to_prod.get(faccao, []))
     st.session_state["f_produto"] = [p for p in produtos_disp if p in produtos_rel]
 else:
-    st.session_state["f_produto"] = [p for p in st.session_state["f_produto"] if p in produtos_disp] or produtos_disp
+    st.session_state["f_produto"] = [
+        p for p in st.session_state["f_produto"] if p in produtos_disp
+    ] or produtos_disp
 prod_sel = st.sidebar.multiselect(
     "Produto",
     produtos_disp,
