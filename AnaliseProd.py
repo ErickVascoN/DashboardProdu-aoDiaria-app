@@ -164,6 +164,24 @@ def init_state_once(key, value):
         st.session_state[key] = value
 
 
+def sync_faccao_from_produto():
+    produtos_sel = st.session_state.get("f_produto", [])
+    prod_to_faccao = st.session_state.get("_prod_to_faccao", {})
+    faccoes_base = st.session_state.get("_faccoes_base", [])
+
+    if not produtos_sel:
+        st.session_state["f_faccao"] = list(faccoes_base)
+    else:
+        faccoes_encontradas = set()
+        for prod in produtos_sel:
+            faccoes_encontradas.update(prod_to_faccao.get(prod, []))
+
+        nova_faccao = [f for f in faccoes_base if f in faccoes_encontradas]
+        st.session_state["f_faccao"] = nova_faccao if nova_faccao else list(faccoes_base)
+
+    st.session_state["_faccao_sync_from_produto"] = True
+
+
 # tratamento dos dados recebidos
 @st.cache_data(ttl=300, show_spinner="Carregando dados da planilha…")
 def carregar_dados():
@@ -296,12 +314,32 @@ if not df_f.empty:
 else:
     st.sidebar.info("Sem dados para aplicar filtro de dias.")
 
-faccoes_disp = sorted(df_f["FACÇÃO"].unique())
+df_base_filtros = df_f.copy()
+
+faccoes_disp = sorted(df_base_filtros["FACÇÃO"].unique())
+st.session_state["_faccoes_base"] = list(faccoes_disp)
+
+prod_map_df = df_base_filtros.copy()
+prod_map_df["PRODUTO_LIMPO"] = prod_map_df["PRODUTO"].astype(str).str.strip()
+prod_map_df = prod_map_df[
+    prod_map_df["PRODUTO_LIMPO"].ne("")
+    & prod_map_df["PRODUTO_LIMPO"].str.upper().ne("NAN")
+]
+st.session_state["_prod_to_faccao"] = {
+    prod: sorted(vals.tolist())
+    for prod, vals in prod_map_df.groupby("PRODUTO_LIMPO")["FACÇÃO"].unique().items()
+}
+
 facc_sel_default = pick_strs_from_qp("faccao", faccoes_disp, faccoes_disp)
 init_state_once("f_faccao", facc_sel_default)
 st.session_state["f_faccao"] = [f for f in st.session_state["f_faccao"] if f in faccoes_disp] or faccoes_disp
 facc_sel = st.sidebar.multiselect("Facção", faccoes_disp, key="f_faccao")
-df_f = df_f[df_f["FACÇÃO"].isin(facc_sel)].copy()
+
+init_state_once("f_faccao_prev", list(facc_sel))
+faccao_changed = sorted(st.session_state["f_faccao_prev"]) != sorted(facc_sel)
+sync_from_produto = st.session_state.pop("_faccao_sync_from_produto", False)
+
+df_f = df_base_filtros[df_base_filtros["FACÇÃO"].isin(facc_sel)].copy()
 
 produtos_disp = sorted(
     df_f["PRODUTO"]
@@ -313,9 +351,18 @@ produtos_disp = sorted(
 )
 prod_sel_default = pick_strs_from_qp("produto", produtos_disp, produtos_disp)
 init_state_once("f_produto", prod_sel_default)
-st.session_state["f_produto"] = [p for p in st.session_state["f_produto"] if p in produtos_disp] or produtos_disp
-prod_sel = st.sidebar.multiselect("Produto", produtos_disp, key="f_produto")
+if faccao_changed and not sync_from_produto:
+    st.session_state["f_produto"] = list(produtos_disp)
+else:
+    st.session_state["f_produto"] = [p for p in st.session_state["f_produto"] if p in produtos_disp] or produtos_disp
+prod_sel = st.sidebar.multiselect(
+    "Produto",
+    produtos_disp,
+    key="f_produto",
+    on_change=sync_faccao_from_produto,
+)
 df_f = df_f[df_f["PRODUTO"].astype(str).str.strip().isin(prod_sel)].copy()
+st.session_state["f_faccao_prev"] = list(facc_sel)
 
 params_to_save = {
     "ano": [str(a) for a in ano_sel],
