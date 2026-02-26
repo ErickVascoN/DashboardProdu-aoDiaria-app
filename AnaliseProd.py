@@ -319,7 +319,7 @@ df_base_filtros = df_f.copy()
 faccoes_disp = sorted(df_base_filtros["FACÇÃO"].unique())
 st.session_state["_faccoes_base"] = list(faccoes_disp)
 
-prod_map_df = df_base_filtros.copy()
+prod_map_df = df.copy()
 prod_map_df["PRODUTO_LIMPO"] = prod_map_df["PRODUTO"].astype(str).str.strip()
 prod_map_df = prod_map_df[
     prod_map_df["PRODUTO_LIMPO"].ne("")
@@ -328,6 +328,10 @@ prod_map_df = prod_map_df[
 st.session_state["_prod_to_faccao"] = {
     prod: sorted(vals.tolist())
     for prod, vals in prod_map_df.groupby("PRODUTO_LIMPO")["FACÇÃO"].unique().items()
+}
+st.session_state["_faccao_to_prod"] = {
+    faccao: sorted(vals.tolist())
+    for faccao, vals in prod_map_df.groupby("FACÇÃO")["PRODUTO_LIMPO"].unique().items()
 }
 
 facc_sel_default = pick_strs_from_qp("faccao", faccoes_disp, faccoes_disp)
@@ -342,7 +346,7 @@ sync_from_produto = st.session_state.pop("_faccao_sync_from_produto", False)
 df_f = df_base_filtros[df_base_filtros["FACÇÃO"].isin(facc_sel)].copy()
 
 produtos_disp = sorted(
-    df_f["PRODUTO"]
+    df["PRODUTO"]
     .dropna()
     .astype(str)
     .str.strip()
@@ -352,7 +356,11 @@ produtos_disp = sorted(
 prod_sel_default = pick_strs_from_qp("produto", produtos_disp, produtos_disp)
 init_state_once("f_produto", prod_sel_default)
 if faccao_changed and not sync_from_produto:
-    st.session_state["f_produto"] = list(produtos_disp)
+    faccao_to_prod = st.session_state.get("_faccao_to_prod", {})
+    produtos_rel = set()
+    for faccao in facc_sel:
+        produtos_rel.update(faccao_to_prod.get(faccao, []))
+    st.session_state["f_produto"] = [p for p in produtos_disp if p in produtos_rel]
 else:
     st.session_state["f_produto"] = [p for p in st.session_state["f_produto"] if p in produtos_disp] or produtos_disp
 prod_sel = st.sidebar.multiselect(
