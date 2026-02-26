@@ -164,6 +164,33 @@ def init_state_once(key, value):
         st.session_state[key] = value
 
 
+def clamp_date(value, min_date, max_date):
+    if value < min_date:
+        return min_date
+    if value > max_date:
+        return max_date
+    return value
+
+
+def normalize_period_selection(value, min_date, max_date, default_ini, default_fim):
+    if isinstance(value, (tuple, list)) and len(value) >= 2:
+        ini, fim = value[0], value[1]
+    elif isinstance(value, (tuple, list)) and len(value) == 1:
+        ini = fim = value[0]
+    elif value is not None:
+        ini = fim = value
+    else:
+        ini, fim = default_ini, default_fim
+
+    ini = clamp_date(ini, min_date, max_date)
+    fim = clamp_date(fim, min_date, max_date)
+
+    if ini > fim:
+        ini, fim = fim, ini
+
+    return ini, fim
+
+
 def sync_faccao_from_produto():
     produtos_sel = st.session_state.get("f_produto", [])
     prod_to_faccao = st.session_state.get("_prod_to_faccao", {})
@@ -252,6 +279,12 @@ st.session_state["f_mes"] = [m for m in st.session_state["f_mes"] if m in meses_
 mes_sel = st.sidebar.multiselect("Mês", meses_disp, format_func=lambda m: MESES_NOME[m], key="f_mes")
 df_f = df_f[df_f["Mês"].isin(mes_sel)]
 
+init_state_once("_ano_mes_prev", {"ano": list(ano_sel), "mes": list(mes_sel)})
+ano_mes_changed = (
+    sorted(st.session_state["_ano_mes_prev"].get("ano", [])) != sorted(ano_sel)
+    or sorted(st.session_state["_ano_mes_prev"].get("mes", [])) != sorted(mes_sel)
+)
+
 st.sidebar.markdown("### 📅 Filtro de Dias")
 modo_dia_default = st.query_params.get("modo_dia", "Período")
 if modo_dia_default not in ["Um dia", "Período"]:
@@ -272,10 +305,9 @@ if not df_f.empty:
     if modo_dia == "Um dia":
         dia_default = pick_date_from_qp("dia", data_max, data_min, data_max)
         init_state_once("f_dia", dia_default)
-        if st.session_state["f_dia"] < data_min:
-            st.session_state["f_dia"] = data_min
-        if st.session_state["f_dia"] > data_max:
+        if ano_mes_changed:
             st.session_state["f_dia"] = data_max
+        st.session_state["f_dia"] = clamp_date(st.session_state["f_dia"], data_min, data_max)
         dia_sel = st.sidebar.date_input(
             "Dia",
             min_value=data_min,
@@ -290,16 +322,12 @@ if not df_f.empty:
         if ini_default > fim_default:
             ini_default, fim_default = fim_default, ini_default
         init_state_once("f_periodo", (ini_default, fim_default))
-        periodo_atual = st.session_state["f_periodo"]
-        if isinstance(periodo_atual, tuple) and len(periodo_atual) == 2:
-            p_ini, p_fim = periodo_atual
-            p_ini = max(data_min, min(p_ini, data_max))
-            p_fim = max(data_min, min(p_fim, data_max))
-            if p_ini > p_fim:
-                p_ini, p_fim = p_fim, p_ini
-            st.session_state["f_periodo"] = (p_ini, p_fim)
-        else:
+        if ano_mes_changed:
             st.session_state["f_periodo"] = (ini_default, fim_default)
+        else:
+            st.session_state["f_periodo"] = normalize_period_selection(
+                st.session_state.get("f_periodo"), data_min, data_max, ini_default, fim_default
+            )
 
         periodo_sel = st.sidebar.date_input(
             "Período",
@@ -308,11 +336,13 @@ if not df_f.empty:
             format="DD/MM/YYYY",
             key="f_periodo",
         )
-        if isinstance(periodo_sel, tuple) and len(periodo_sel) == 2:
-            ini, fim = periodo_sel
-            df_f = df_f[df_f["Data"].dt.date.between(ini, fim)]
+        ini, fim = normalize_period_selection(periodo_sel, data_min, data_max, ini_default, fim_default)
+        st.session_state["f_periodo"] = (ini, fim)
+        df_f = df_f[df_f["Data"].dt.date.between(ini, fim)]
 else:
     st.sidebar.info("Sem dados para aplicar filtro de dias.")
+
+st.session_state["_ano_mes_prev"] = {"ano": list(ano_sel), "mes": list(mes_sel)}
 
 df_base_filtros = df_f.copy()
 
