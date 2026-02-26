@@ -337,7 +337,6 @@ if not df_f.empty:
             key="f_periodo",
         )
         ini, fim = normalize_period_selection(periodo_sel, data_min, data_max, ini_default, fim_default)
-        st.session_state["f_periodo"] = (ini, fim)
         df_f = df_f[df_f["Data"].dt.date.between(ini, fim)]
 else:
     st.sidebar.info("Sem dados para aplicar filtro de dias.")
