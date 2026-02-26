@@ -159,6 +159,11 @@ def sync_query_params(params, managed_keys):
     return changed
 
 
+def init_state_once(key, value):
+    if key not in st.session_state:
+        st.session_state[key] = value
+
+
 # tratamento dos dados recebidos
 @st.cache_data(ttl=300, show_spinner="Carregando dados da planilha…")
 def carregar_dados():
@@ -217,29 +222,26 @@ st.sidebar.title("📊 Filtros")
 
 anos = sorted(df["Ano"].unique())
 ano_sel_default = pick_ints_from_qp("ano", anos, anos)
-ano_sel = st.sidebar.multiselect("Ano", anos, default=ano_sel_default)
+init_state_once("f_ano", ano_sel_default)
+st.session_state["f_ano"] = [a for a in st.session_state["f_ano"] if a in anos] or anos
+ano_sel = st.sidebar.multiselect("Ano", anos, key="f_ano")
 df_f = df[df["Ano"].isin(ano_sel)]
 
 meses_disp = sorted(df_f["Mês"].unique())
 mes_sel_default = pick_ints_from_qp("mes", meses_disp, meses_disp)
-mes_sel = st.sidebar.multiselect(
-    "Mês",
-    meses_disp,
-    default=mes_sel_default,
-    format_func=lambda m: MESES_NOME[m],
-)
+init_state_once("f_mes", mes_sel_default)
+st.session_state["f_mes"] = [m for m in st.session_state["f_mes"] if m in meses_disp] or meses_disp
+mes_sel = st.sidebar.multiselect("Mês", meses_disp, format_func=lambda m: MESES_NOME[m], key="f_mes")
 df_f = df_f[df_f["Mês"].isin(mes_sel)]
 
 st.sidebar.markdown("### 📅 Filtro de Dias")
 modo_dia_default = st.query_params.get("modo_dia", "Período")
 if modo_dia_default not in ["Um dia", "Período"]:
     modo_dia_default = "Período"
-modo_dia = st.sidebar.radio(
-    "Tipo de filtro",
-    ["Um dia", "Período"],
-    index=0 if modo_dia_default == "Um dia" else 1,
-    horizontal=True,
-)
+init_state_once("f_modo_dia", modo_dia_default)
+if st.session_state["f_modo_dia"] not in ["Um dia", "Período"]:
+    st.session_state["f_modo_dia"] = "Período"
+modo_dia = st.sidebar.radio("Tipo de filtro", ["Um dia", "Período"], horizontal=True, key="f_modo_dia")
 
 dia_sel = None
 ini = None
@@ -251,12 +253,17 @@ if not df_f.empty:
 
     if modo_dia == "Um dia":
         dia_default = pick_date_from_qp("dia", data_max, data_min, data_max)
+        init_state_once("f_dia", dia_default)
+        if st.session_state["f_dia"] < data_min:
+            st.session_state["f_dia"] = data_min
+        if st.session_state["f_dia"] > data_max:
+            st.session_state["f_dia"] = data_max
         dia_sel = st.sidebar.date_input(
             "Dia",
-            value=dia_default,
             min_value=data_min,
             max_value=data_max,
             format="DD/MM/YYYY",
+            key="f_dia",
         )
         df_f = df_f[df_f["Data"].dt.date == dia_sel]
     else:
@@ -264,13 +271,24 @@ if not df_f.empty:
         fim_default = pick_date_from_qp("fim", data_max, data_min, data_max)
         if ini_default > fim_default:
             ini_default, fim_default = fim_default, ini_default
+        init_state_once("f_periodo", (ini_default, fim_default))
+        periodo_atual = st.session_state["f_periodo"]
+        if isinstance(periodo_atual, tuple) and len(periodo_atual) == 2:
+            p_ini, p_fim = periodo_atual
+            p_ini = max(data_min, min(p_ini, data_max))
+            p_fim = max(data_min, min(p_fim, data_max))
+            if p_ini > p_fim:
+                p_ini, p_fim = p_fim, p_ini
+            st.session_state["f_periodo"] = (p_ini, p_fim)
+        else:
+            st.session_state["f_periodo"] = (ini_default, fim_default)
 
         periodo_sel = st.sidebar.date_input(
             "Período",
-            value=(ini_default, fim_default),
             min_value=data_min,
             max_value=data_max,
             format="DD/MM/YYYY",
+            key="f_periodo",
         )
         if isinstance(periodo_sel, tuple) and len(periodo_sel) == 2:
             ini, fim = periodo_sel
@@ -280,7 +298,9 @@ else:
 
 faccoes_disp = sorted(df_f["FACÇÃO"].unique())
 facc_sel_default = pick_strs_from_qp("faccao", faccoes_disp, faccoes_disp)
-facc_sel = st.sidebar.multiselect("Facção", faccoes_disp, default=facc_sel_default)
+init_state_once("f_faccao", facc_sel_default)
+st.session_state["f_faccao"] = [f for f in st.session_state["f_faccao"] if f in faccoes_disp] or faccoes_disp
+facc_sel = st.sidebar.multiselect("Facção", faccoes_disp, key="f_faccao")
 df_f = df_f[df_f["FACÇÃO"].isin(facc_sel)].copy()
 
 produtos_disp = sorted(
@@ -292,7 +312,9 @@ produtos_disp = sorted(
     .unique()
 )
 prod_sel_default = pick_strs_from_qp("produto", produtos_disp, produtos_disp)
-prod_sel = st.sidebar.multiselect("Produto", produtos_disp, default=prod_sel_default)
+init_state_once("f_produto", prod_sel_default)
+st.session_state["f_produto"] = [p for p in st.session_state["f_produto"] if p in produtos_disp] or produtos_disp
+prod_sel = st.sidebar.multiselect("Produto", produtos_disp, key="f_produto")
 df_f = df_f[df_f["PRODUTO"].astype(str).str.strip().isin(prod_sel)].copy()
 
 params_to_save = {
