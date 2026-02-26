@@ -321,22 +321,34 @@ if not df_f.empty:
         fim_default = pick_date_from_qp("fim", data_max, data_min, data_max)
         if ini_default > fim_default:
             ini_default, fim_default = fim_default, ini_default
-        init_state_once("f_periodo", (ini_default, fim_default))
-        if ano_mes_changed:
-            st.session_state["f_periodo"] = (ini_default, fim_default)
-        else:
-            st.session_state["f_periodo"] = normalize_period_selection(
-                st.session_state.get("f_periodo"), data_min, data_max, ini_default, fim_default
-            )
 
-        periodo_sel = st.sidebar.date_input(
-            "Período",
+        init_state_once("f_inicio", ini_default)
+        init_state_once("f_fim", fim_default)
+
+        if ano_mes_changed:
+            st.session_state["f_inicio"] = data_min
+            st.session_state["f_fim"] = data_max
+        else:
+            st.session_state["f_inicio"] = clamp_date(st.session_state["f_inicio"], data_min, data_max)
+            st.session_state["f_fim"] = clamp_date(st.session_state["f_fim"], data_min, data_max)
+
+        ini_sel = st.sidebar.date_input(
+            "Início",
             min_value=data_min,
             max_value=data_max,
             format="DD/MM/YYYY",
-            key="f_periodo",
+            key="f_inicio",
         )
-        ini, fim = normalize_period_selection(periodo_sel, data_min, data_max, ini_default, fim_default)
+        fim_sel = st.sidebar.date_input(
+            "Fim",
+            min_value=data_min,
+            max_value=data_max,
+            format="DD/MM/YYYY",
+            key="f_fim",
+        )
+
+        ini = min(ini_sel, fim_sel)
+        fim = max(ini_sel, fim_sel)
         df_f = df_f[df_f["Data"].dt.date.between(ini, fim)]
 else:
     st.sidebar.info("Sem dados para aplicar filtro de dias.")
