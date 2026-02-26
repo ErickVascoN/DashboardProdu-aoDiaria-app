@@ -398,7 +398,7 @@ with tab_rank:
     st.markdown("---")
 
     # Facções abaixo de 70% de atingimento
-    st.markdown("### 🚨 Facções com Atingimento Abaixo de 70%")
+    st.markdown("### 🚨 Facções com Produção Abaixo de 70% da Meta")
     alerta = tbl[tbl["Ating. %"] < 70][["FACÇÃO", "Produzido", "Meta Período", "Ating. %", "Saldo"]]
     if alerta.empty:    
         st.success("Nenhuma facção abaixo de 70% no período selecionado!")
