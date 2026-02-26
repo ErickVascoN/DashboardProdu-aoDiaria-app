@@ -4,7 +4,7 @@ import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
 
-# ── Configuração da página ──────────────────────────────────────────
+# inicio da page
 st.set_page_config(
     page_title="Dashboard Produção — CAMESA",
     page_icon="📊",
@@ -12,7 +12,7 @@ st.set_page_config(
     initial_sidebar_state="expanded",
 )
 
-# ── CSS personalizado ───────────────────────────────────────────────
+# CSS 
 st.markdown("""
 <style>
     /* cards dos KPIs */
@@ -44,7 +44,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# ── Fonte de dados ──────────────────────────────────────────────────
+# push dos dados da tabela de produção
 URL_CSV = (
     "https://docs.google.com/spreadsheets/d/"
     "15s_ZttYG4UkSprgp4V_9gUBSgg7p8JRTiSQZL4xBi6Y/export?format=csv&gid=783677968"
@@ -67,7 +67,7 @@ MESES_NOME = {
     7: "Jul", 8: "Ago", 9: "Set", 10: "Out", 11: "Nov", 12: "Dez",
 }
 
-# ── Helpers ─────────────────────────────────────────────────────────
+# helpers
 def fmt_br(v, decimals=0):
     """Formata número no padrão brasileiro (ponto como milhar, vírgula decimal)."""
     txt = f"{v:,.{decimals}f}"
@@ -80,7 +80,7 @@ def dias_uteis(datas):
     return int((d.dt.weekday <= 4).sum())
 
 
-# ── Carga e tratamento ──────────────────────────────────────────────
+# tratamento dos dados recebidos
 @st.cache_data(ttl=300, show_spinner="Carregando dados da planilha…")
 def carregar_dados():
     df_raw = pd.read_csv(URL_CSV, header=1)
@@ -122,11 +122,10 @@ def carregar_dados():
     df["DiaSemana"] = df["Data"].dt.day_name()
     return df
 
-
-# ── Dados ───────────────────────────────────────────────────────────
+# dados tratados
 df = carregar_dados()
 
-# ── Sidebar — Filtros ───────────────────────────────────────────────
+# sidebar dos filtros
 st.sidebar.image(
     "https://img.icons8.com/fluency/96/combo-chart.png", width=64,
 )
@@ -150,7 +149,7 @@ df_f = df_f[df_f["FACÇÃO"].isin(facc_sel)].copy()
 st.sidebar.divider()
 st.sidebar.caption("Dados atualizados a cada 5 min.")
 
-# ── Métricas globais ────────────────────────────────────────────────
+# dados globais para as KPIs
 prod_total = df_f["Produzido"].sum()
 meta_dia_total = sum(META_FACCAO.get(f, 0) for f in facc_sel)
 d_uteis = dias_uteis(df_f["Data"])
@@ -159,11 +158,11 @@ saldo = prod_total - meta_periodo
 ating = (prod_total / meta_periodo) if meta_periodo > 0 else 0
 media_dia = prod_total / d_uteis if d_uteis else 0
 
-# ── Header ──────────────────────────────────────────────────────────
+# ── Header 
 st.markdown("## 🏭 Dashboard de Produção Diária — CAMESA")
 st.markdown("---")
 
-# ── KPI cards (6 colunas) ──────────────────────────────────────────
+# ── KPIs (6 cards) 
 k1, k2, k3, k4, k5, k6 = st.columns(6)
 k1.metric("Total Produzido", fmt_br(prod_total))
 k2.metric("Meta do Período", fmt_br(meta_periodo))
@@ -175,14 +174,13 @@ k6.metric("Dias Úteis", str(d_uteis))
 
 st.markdown("")  # espaço
 
-# ═════════════════════════════════════════════════════════════════════
+
 #  ABAS
-# ═════════════════════════════════════════════════════════════════════
 tab_vis, tab_facc, tab_rank, tab_dados = st.tabs(
     ["📈 Visão Geral", "🏢 Por Facção", "🏆 Ranking & Alertas", "📋 Dados"]
 )
 
-# ─── Tab 1 — Visão Geral ───────────────────────────────────────────
+# ─── Tab 1 — Visão Geral 
 with tab_vis:
 
     # 1.1  Produção diária × meta (barras + linha)
@@ -399,11 +397,11 @@ with tab_rank:
 
     st.markdown("---")
 
-    # Facções abaixo de 80% de atingimento
-    st.markdown("### 🚨 Facções com Atingimento Abaixo de 80%")
-    alerta = tbl[tbl["Ating. %"] < 80][["FACÇÃO", "Produzido", "Meta Período", "Ating. %", "Saldo"]]
-    if alerta.empty:
-        st.success("Nenhuma facção abaixo de 80% no período selecionado!")
+    # Facções abaixo de 70% de atingimento
+    st.markdown("### 🚨 Facções com Atingimento Abaixo de 70%")
+    alerta = tbl[tbl["Ating. %"] < 70][["FACÇÃO", "Produzido", "Meta Período", "Ating. %", "Saldo"]]
+    if alerta.empty:    
+        st.success("Nenhuma facção abaixo de 70% no período selecionado!")
     else:
         st.dataframe(
             alerta.style.format({
